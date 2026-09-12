@@ -1,0 +1,11 @@
+[Event "Chess Analyzer Demo"]
+[Site "Local"]
+[Date "2026.09.01"]
+[Round "1"]
+[White "Alice"]
+[Black "Bob"]
+[WhiteElo "2017"]
+[BlackElo "1999"]
+[Result "1-0"]
+
+1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6?? 4. Qxf7# 1-0

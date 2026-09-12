@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="A private workspace for analyzing and reviewing chess games.">
+    <title>Chess Analyzer</title>
+    <link rel="icon" type="image/png" href="/static/assets/logo.png?v=1">
+    <link rel="stylesheet" href="/static/styles.css?v=20260906-logo">
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <a class="brand" href="#dashboard" aria-label="Chess Analyzer home">
+                <img class="brand-mark" src="/static/assets/logo.png?v=1" width="34" height="34" alt="">
+                <span><strong>Chess-Analyzer</strong><small>Analyze your moves</small></span>
+            </a>
+
+            <div class="system-state service-summary">
+                <span class="state-dot" id="system-state-dot"></span>
+                <span><strong id="system-state-title">Checking services</strong><small id="system-state-copy">API and database</small></span>
+            </div>
+
+            <nav class="main-nav" aria-label="Main navigation">
+                <button class="nav-item active" data-view-target="dashboard" type="button">
+                    <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20h-5v-6H9v6H4v-9.5Z"/></svg>
+                    <span>Main</span>
+                </button>
+                <button class="nav-item" data-view-target="games" type="button">
+                    <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 3v3h4V7H5Zm6 0v3h8V7h-8ZM5 12v5h4v-5H5Zm6 0v5h8v-5h-8Z"/></svg>
+                    <span>Matches</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <a class="docs-link" href="/docs" target="_blank" rel="noreferrer">Developer API ↗</a>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <div><p class="eyebrow" id="page-eyebrow">Private workspace</p><h1 id="page-title">Overview</h1></div>
+                <button class="ghost-button" id="refresh-button" type="button">Refresh</button>
+            </header>
+
+            <div class="notice hidden" id="global-notice" role="status"></div>
+
+            <section class="view active" id="dashboard-view">
+                <div class="dashboard-grid">
+                    <article class="panel upload-card">
+                        <div class="panel-heading">
+                            <div><p class="eyebrow">New analysis</p><h2>Upload a game</h2></div>
+                            <span class="panel-index">PGN</span>
+                        </div>
+                        <form id="upload-form">
+                            <div class="upload-source">
+                                <div class="upload-tabs" aria-label="PGN source">
+                                    <button class="active" type="button" data-upload-mode="link">Chess.com link</button>
+                                    <button type="button" data-upload-mode="text">Paste PGN</button>
+                                    <button type="button" data-upload-mode="file">File</button>
+                                </div>
+                                <label class="link-zone" id="link-zone" for="chess-com-link">
+                                    <span>Chess.com game link</span>
+                                    <input id="chess-com-link" type="url" placeholder="https://www.chess.com/game/live/..." autocomplete="off">
+                                    <small>Paste the link copied from Share</small>
+                                </label>
+                                <label class="drop-zone hidden" id="drop-zone" for="pgn-file">
+                                    <input id="pgn-file" name="file" type="file" accept=".pgn,text/plain">
+                                    <span class="drop-piece">+</span>
+                                    <strong id="file-label">Drop a PGN file or browse</strong>
+                                    <small>One game · 1 MB maximum</small>
+                                </label>
+                                <label class="paste-zone hidden" id="paste-zone" for="pgn-text">
+                                    <span>PGN text</span>
+                                    <textarea id="pgn-text" spellcheck="false" placeholder="[Event &quot;My Game&quot;]&#10;[White &quot;Player 1&quot;]&#10;[Black &quot;Player 2&quot;]&#10;&#10;1. e4 e5 2. Nf3 Nc6"></textarea>
+                                </label>
+                            </div>
+                            <div class="form-actions">
+                                <fieldset class="color-picker">
+                                    <legend>Your color</legend>
+                                    <label><input type="radio" name="user_color" value="white" checked><span><b class="piece">♕</b> White</span></label>
+                                    <label><input type="radio" name="user_color" value="black"><span><b class="piece">♛</b> Black</span></label>
+                                </fieldset>
+                                <button class="primary-button" id="upload-button" type="submit">Analyze game</button>
+                            </div>
+                        </form>
+                    </article>
+
+                    <article class="panel engine-panel">
+                        <div class="panel-heading">
+                            <div><p class="eyebrow">Analysis engine</p><h2>Stockfish</h2></div>
+                        </div>
+                        <div class="engine-display">
+                            <span class="engine-logo stockfish-logo"><img src="/static/assets/stockfish.png" alt="" aria-hidden="true"></span>
+                            <strong>Stockfish</strong>
+                            <small>Reliable local analysis</small>
+                        </div>
+                    </article>
+                </div>
+
+                <article class="panel recent-panel">
+                    <div class="panel-heading compact-heading">
+                        <div><p class="eyebrow">Activity</p><h2>Recent games</h2></div>
+                    </div>
+                    <div id="recent-games" class="games-list"></div>
+                </article>
+
+            </section>
+
+            <section class="view" id="games-view">
+                <article class="panel recent-panel games-recent-panel">
+                    <div class="panel-heading compact-heading">
+                        <div><p class="eyebrow">Library</p><h2>All games</h2></div>
+                    </div>
+                    <div id="matches-games" class="games-list"></div>
+                </article>
+
+                <article class="panel analysis-panel hidden" id="analysis-panel">
+                    <div class="analysis-header review-toolbar">
+                        <div>
+                            <h2 id="analysis-title">Game analysis</h2>
+                            <p class="muted" id="analysis-meta"></p>
+                        </div>
+                        <div class="analysis-actions">
+                            <button class="ghost-button" id="reanalyze-button" type="button">Run again</button>
+                            <button class="icon-button" id="close-analysis-button" type="button" aria-label="Close analysis">×</button>
+                        </div>
+                    </div>
+
+                    <div class="review-layout">
+                        <div class="review-board-column">
+                            <div class="board-player" id="top-player"></div>
+                            <div class="review-board-wrap">
+                                <div class="evaluation-bar" aria-label="Position evaluation">
+                                    <div class="evaluation-white" id="evaluation-white"></div>
+                                    <span id="review-evaluation">0.00</span>
+                                </div>
+                                <div class="chessboard review-board" id="review-chessboard" aria-label="Game position"></div>
+                            </div>
+                            <div class="board-player bottom-player" id="bottom-player"></div>
+
+                            <div class="review-controls" aria-label="Move navigation">
+                                <button type="button" id="review-first" aria-label="Starting position">|‹</button>
+                                <button type="button" id="review-previous" aria-label="Previous move">‹</button>
+                                <span id="review-progress">Start</span>
+                                <button type="button" id="review-next" aria-label="Next move">›</button>
+                                <button type="button" id="review-last" aria-label="Final position">›|</button>
+                            </div>
+
+                            <div class="current-move-card">
+                                <div>
+                                    <span class="move-quality quality-neutral" id="review-quality">Start</span>
+                                    <strong id="review-current-move">Starting position</strong>
+                                </div>
+                                <div class="current-move-eval">
+                                    <small>Evaluation</small>
+                                    <strong id="review-current-evaluation">0.00</strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <aside class="review-moves-panel">
+                            <div class="review-list-heading">
+                                <h2>Notation <span>Moves</span></h2>
+                                <span id="review-move-count">0 moves</span>
+                            </div>
+                            <div class="review-moves" id="review-moves"></div>
+                            <div class="review-details">
+                                <div><small>Best move</small><strong id="review-best-move">—</strong></div>
+                                <div><small>Engine line</small><p id="review-engine-line">—</p></div>
+                            </div>
+                        </aside>
+                    </div>
+                </article>
+            </section>
+        </main>
+    </div>
+    <script src="/static/app.js?v=20260905-neo-pieces" defer></script>
+</body>
+</html>

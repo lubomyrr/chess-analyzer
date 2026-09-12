@@ -1,0 +1,98 @@
+services:
+  postgres:
+    image: postgres:17.11-alpine3.24
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:4.2.9-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    image: chess-analyzer-app:local
+    command:
+      - sh
+      - -c
+      - python -m alembic upgrade head && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CELERY_BROKER_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672//
+      STOCKFISH_PATH: /usr/games/stockfish
+      STOCKFISH_DEPTH: ${STOCKFISH_DEPTH}
+      STOCKFISH_THREADS: ${STOCKFISH_THREADS}
+      STOCKFISH_HASH_MB: ${STOCKFISH_HASH_MB}
+      STOCKFISH_TIMEOUT_SECONDS: ${STOCKFISH_TIMEOUT_SECONDS:-120}
+      ANALYSIS_PV_LENGTH: ${ANALYSIS_PV_LENGTH}
+    ports:
+      - "127.0.0.1:8001:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  worker:
+    build: .
+    image: chess-analyzer-app:local
+    command:
+      - python
+      - -m
+      - celery
+      - -A
+      - app.core.celery_app:celery_app
+      - worker
+      - --loglevel=INFO
+      - --concurrency=1
+      - --without-mingle
+      - --without-gossip
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CELERY_BROKER_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672//
+      STOCKFISH_PATH: /usr/games/stockfish
+      STOCKFISH_DEPTH: ${STOCKFISH_DEPTH}
+      STOCKFISH_THREADS: ${STOCKFISH_THREADS}
+      STOCKFISH_HASH_MB: ${STOCKFISH_HASH_MB}
+      STOCKFISH_TIMEOUT_SECONDS: ${STOCKFISH_TIMEOUT_SECONDS:-120}
+      ANALYSIS_PV_LENGTH: ${ANALYSIS_PV_LENGTH}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  rabbitmq_data:

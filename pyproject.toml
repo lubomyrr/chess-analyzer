@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chess-analyzer"
+version = "0.1.0"
+description = "Private web application for asynchronous Stockfish game analysis"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic",
+    "celery",
+    "fastapi",
+    "httpx",
+    "psycopg[binary]",
+    "pydantic-settings",
+    "python-chess",
+    "python-multipart",
+    "sqlalchemy",
+    "uvicorn[standard]",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+namespaces = true
