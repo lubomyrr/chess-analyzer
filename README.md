@@ -59,7 +59,7 @@ hash budget is shared across the concurrently running engines.
 
 ### Game analysis
 
-![Chess Analyzer game review](docs/screenshots/game-analysis-flags.jpg)
+![Chess Analyzer game review](docs/screenshots/game-analysis-updated.jpg)
 
 ## Run locally
 

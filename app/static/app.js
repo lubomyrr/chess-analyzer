@@ -605,11 +605,10 @@ function renderReviewBoard(fen, orientation, currentMove) {
     const nextMove = state.currentMoves[state.reviewIndex + 1];
     const candidateKey = `${state.currentGame?.id}:${state.reviewIndex + 1}`;
     const candidates = state.candidateCache.has(candidateKey) ? state.candidateCache.get(candidateKey)
-        : nextMove?.candidate_moves?.length ? nextMove.candidate_moves
         : nextMove?.best_move ? [nextMove.best_move] : [];
     const arrows = bestMoveArrows(candidates, files, ranks, board);
     if (arrows) container.insertAdjacentHTML("beforeend", arrows);
-    if (!state.candidateCache.has(candidateKey) && (nextMove?.candidate_moves?.length ?? 0) < 3) {
+    if (!state.candidateCache.has(candidateKey)) {
         loadReviewCandidates(fen);
     }
 }

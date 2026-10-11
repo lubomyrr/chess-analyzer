@@ -95,6 +95,29 @@ test("candidate arrows point to the same chess squares in either orientation", (
     assert.equal(vm.runInContext('bestMoveArrows([], "abcdefgh", "87654321", {})', context), "");
 });
 
+test("stored unfiltered alternatives are hidden until the scored suggestions arrive", () => {
+    const { context, document } = review();
+    vm.runInContext(`
+        state.currentGame = {id: 11};
+        state.reviewIndex = -1;
+        state.currentMoves = [{best_move: "e2e4", candidate_moves: ["e2e4", "d2d4", "g1f3"]}];
+        state.renderedBoard = {gameId: 11, orientation: "white", board: {}, squares: new Map(), pieces: new Map(), index: -1};
+        updateBoardPieces = () => {};
+        globalThis.suggestionRequests = 0;
+        loadReviewCandidates = () => suggestionRequests++;
+        renderReviewBoard("8/8/8/8/8/8/8/8 w - - 0 1", "white", null);
+    `, context);
+    let html = document.querySelector('#review-chessboard').innerHTML;
+    assert.match(html, /Best moves: e2e4"/);
+    assert.doesNotMatch(html, /Best moves: e2e4, d2d4/);
+    assert.equal(context.suggestionRequests, 1);
+    vm.runInContext(`
+        state.candidateCache.set("11:0", ["e2e4"]);
+        renderReviewBoard("8/8/8/8/8/8/8/8 w - - 0 1", "white", null);
+    `, context);
+    assert.equal(context.suggestionRequests, 1); // One confirmed move is a complete result.
+});
+
 test("quick navigation debounces requests and ignores late suggestions for an old position", async () => {
     const { context, timers, document } = review();
     context.reviewState.currentGame = { id: 10 };

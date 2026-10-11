@@ -180,9 +180,6 @@ def read_position_candidates(
     parsed = parse_pgn(game.raw_pgn)
     if ply > len(parsed.moves):
         raise HTTPException(status_code=422, detail="Position is outside this game")
-    stored = next((move for move in get_game_moves(database, game.id) if move.ply == ply + 1), None)
-    if stored is not None and len(stored.candidate_moves or []) >= 3:
-        return PositionCandidatesResponse(position_ply=ply, candidate_moves=stored.candidate_moves)
     board = chess.Board(parsed.starting_fen)
     for move in parsed.moves[:ply]:
         board.push_uci(move.uci_move)

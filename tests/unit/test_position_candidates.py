@@ -5,6 +5,71 @@ import pytest
 from app.services import position_candidates as service
 
 
+def candidate(move, score, color=chess.WHITE):
+    return {'pv': [chess.Move.from_uci(move)], 'score': chess.engine.PovScore(score, color)}
+
+
+@pytest.mark.parametrize(('scores', 'expected'), [
+    ([30, 20, 10], ['e2e4', 'd2d4', 'g1f3']),
+    ([30, 0, -200], ['e2e4', 'd2d4']),
+    ([0, -75, -100], ['e2e4', 'd2d4', 'g1f3']),
+    ([0, -75, -150], ['e2e4', 'd2d4']),
+    ([0, -150, -400], ['e2e4']),
+    ([400, 0, -400], ['e2e4']),
+    ([-400, -420, -900], ['e2e4', 'd2d4']),
+])
+def test_only_non_error_alternatives_are_shown(scores, expected):
+    lines = [candidate(move, chess.engine.Cp(score))
+             for move, score in zip(['e2e4', 'd2d4', 'g1f3'], scores)]
+    assert list(service._select_viable_candidates(chess.Board(), lines)) == expected
+
+
+def test_candidates_are_compared_from_black_perspective():
+    board = chess.Board()
+    board.push_san('e4')
+    lines = [candidate('e7e5', chess.engine.Cp(-30)),
+             candidate('c7c5', chess.engine.Cp(-20)),
+             candidate('f7f6', chess.engine.Cp(300))]
+    assert service._select_viable_candidates(board, lines) == ('e7e5', 'c7c5')
+
+
+@pytest.mark.parametrize(('best', 'alternative', 'expected'), [
+    (chess.engine.Cp(0), chess.engine.Mate(-1), ('e2e4',)),
+    (chess.engine.Mate(3), chess.engine.Mate(-2), ('e2e4',)),
+    (chess.engine.Cp(-1000), chess.engine.Mate(-1), ('e2e4', 'd2d4')),
+    (chess.engine.Mate(-8), chess.engine.Mate(-1), ('e2e4', 'd2d4')),
+])
+def test_mate_alternatives_follow_the_same_error_classification(best, alternative, expected):
+    lines = [candidate('e2e4', best), candidate('d2d4', alternative)]
+    assert service._select_viable_candidates(chess.Board(), lines) == expected
+
+
+def test_single_legal_reply_has_one_arrow():
+    board = chess.Board('7k/8/5K2/6Q1/8/8/8/8 b - - 0 1')
+    assert list(board.legal_moves) == [chess.Move.from_uci('h8h7')]
+    assert service._select_viable_candidates(board, [candidate('h8h7', chess.engine.Mate(-2))]) == ('h8h7',)
+
+
+def test_unscored_duplicate_and_illegal_alternatives_are_not_guessed():
+    lines = [candidate('e2e4', chess.engine.Cp(30)), candidate('e2e4', chess.engine.Cp(30)),
+             {'pv': [chess.Move.from_uci('d2d4')]}, candidate('e7e5', chess.engine.Cp(30))]
+    assert service._select_viable_candidates(chess.Board(), lines) == ('e2e4',)
+
+
+def test_endpoint_does_not_return_old_unfiltered_three_move_storage(monkeypatch):
+    from types import SimpleNamespace
+    from fastapi import Response
+    from app.api.routes import games
+
+    monkeypatch.setattr(games, 'get_game', lambda *args: SimpleNamespace(raw_pgn='[Result "*"]\n\n1. e4 *'))
+    monkeypatch.setattr(games, 'get_game_moves', lambda *args: [SimpleNamespace(
+        ply=1, candidate_moves=['e2e4', 'd2d4', 'g1f3'])])
+    monkeypatch.setattr(games, 'position_candidates', lambda *args, **kwargs: ['e2e4'])
+    result = games.read_position_candidates(1, 0, Response(), object())
+    assert result.ready
+    assert result.candidate_moves == ['e2e4']
+
+
 @pytest.fixture
 def candidates(monkeypatch, tmp_path):
     service.close_candidate_engine()
@@ -23,7 +88,10 @@ def candidates(monkeypatch, tmp_path):
 
         def analyse(self, board, limit, **kwargs):
             self.calls.append((board.copy(), limit.depth, kwargs))
-            return [{'pv': [chess.Move.from_uci(move)]} for move in ['e2e4', 'd2d4', 'g1f3']]
+            moves = ['e2e4', 'd2d4', 'g1f3'] if board.turn else ['e7e5', 'c7c5', 'g8f6']
+            return [{'pv': [chess.Move.from_uci(move)],
+                     'score': chess.engine.PovScore(chess.engine.Cp(score), board.turn)}
+                    for move, score in zip(moves, [30, 20, 10])]
 
         def quit(self):
             self.closed = True

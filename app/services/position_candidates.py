@@ -11,6 +11,7 @@ import chess
 import chess.engine
 
 from app.services.chess_analysis import _file_digest
+from app.services.move_quality import classify_loss, expected_points
 from app.services.stockfish_runtime import stockfish_executable
 
 _cache: OrderedDict[str, tuple[str, ...]] = OrderedDict()
@@ -18,6 +19,28 @@ _cache_lock = Lock()
 _search_lock = Lock()
 _engine: chess.engine.SimpleEngine | None = None
 _engine_config: tuple | None = None
+
+
+def _select_viable_candidates(board: chess.Board, lines: list[chess.engine.InfoDict]) -> tuple[str, ...]:
+    """Keep the best root and alternatives through Inaccuracy; hide errors."""
+    roots = [line for line in lines if line.get('pv') and line['pv'][0] in board.legal_moves]
+    if not roots:
+        return ()
+    best = roots[0]
+    moves = [best['pv'][0].uci()]
+    if 'score' not in best:
+        return tuple(moves)
+    best_score = best['score'].pov(board.turn)
+    best_points = expected_points(best_score.score(mate_score=100_000))
+    for line in roots[1:]:
+        move = line['pv'][0].uci()
+        if move in moves or 'score' not in line:
+            continue
+        score = line['score'].pov(board.turn)
+        loss = best_points - expected_points(score.score(mate_score=100_000))
+        if classify_loss(loss) not in {'mistake', 'blunder'}:
+            moves.append(move)
+    return tuple(moves[:3])
 
 
 def _candidate_key(board: chess.Board, engine_path: str, depth: int) -> str:
@@ -58,7 +81,7 @@ def position_candidates(board: chess.Board, *, engine_path: str, depth: int,
             _engine_config = config
         lines = _engine.analyse(board, chess.engine.Limit(depth=depth), multipv=3,
                                 info=chess.engine.INFO_SCORE | chess.engine.INFO_PV)
-        moves = tuple(line['pv'][0].uci() for line in lines if line.get('pv'))
+        moves = _select_viable_candidates(board, lines)
         with _cache_lock:
             _cache[key] = moves
             _cache.move_to_end(key)
