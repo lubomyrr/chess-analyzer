@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
+import os
+from time import monotonic
 
-import chess
-import chess.engine
 from sqlalchemy import delete
 
 from app.core.celery_app import celery_app
@@ -9,8 +9,16 @@ from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.game import Game
 from app.models.game_move import GameMove
-from app.services.chess_analysis import analyze_moves
+from app.services.chess_analysis import analyze_game_parallel
 from app.services.pgn_parser import parse_pgn
+
+
+def engine_thread_count(configured: int) -> int:
+    if configured > 0:
+        return configured
+    available = (len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity")
+                 else os.cpu_count() or 1)
+    return min(8, max(1, available - 2 if available > 4 else available))
 
 
 @celery_app.task(name="games.analyze", reject_on_worker_lost=True)
@@ -25,36 +33,24 @@ def analyze_game_task(game_id: int) -> None:
         game.error_message = None
         database.commit()
 
-        engine: chess.engine.SimpleEngine | None = None
-
         try:
             parsed_game = parse_pgn(game.raw_pgn)
-            engine = chess.engine.SimpleEngine.popen_uci(
-                settings.stockfish_path,
-                timeout=settings.stockfish_timeout_seconds,
-            )
-            engine_options = {}
-            if "Threads" in engine.options:
-                engine_options["Threads"] = settings.stockfish_threads
-            if "Hash" in engine.options:
-                engine_options["Hash"] = settings.stockfish_hash_mb
-            if engine_options:
-                engine.configure(engine_options)
-
-            board = chess.Board(parsed_game.starting_fen)
-            played_moves = (
-                chess.Move.from_uci(parsed_move.uci_move)
-                for parsed_move in parsed_game.moves
-            )
-            analyses = analyze_moves(
-                engine=engine,
-                board=board,
-                played_moves=played_moves,
+            # Publish completed moves while the remaining positions are searched.
+            database.execute(delete(GameMove).where(GameMove.game_id == game.id))
+            database.commit()
+            last_publish = monotonic()
+            analyses = analyze_game_parallel(
+                parsed_game,
+                engine_path=settings.stockfish_path,
                 depth=settings.stockfish_depth,
                 pv_length=settings.analysis_pv_length,
+                cpu_budget=engine_thread_count(settings.stockfish_threads),
+                hash_mb=settings.stockfish_hash_mb,
+                timeout=settings.stockfish_timeout_seconds,
+                use_cache=True,
             )
-            game_moves = [
-                GameMove(
+            for parsed_move, analysis in zip(parsed_game.moves, analyses, strict=True):
+                database.add(GameMove(
                     game_id=game.id,
                     ply=parsed_move.ply,
                     move_number=parsed_move.move_number,
@@ -69,18 +65,12 @@ def analyze_game_task(game_id: int) -> None:
                     classification=analysis.classification,
                     best_move=analysis.best_move,
                     principal_variation=analysis.principal_variation,
-                )
-                for parsed_move, analysis in zip(
-                    parsed_game.moves,
-                    analyses,
-                    strict=True,
-                )
-            ]
-
-            database.execute(
-                delete(GameMove).where(GameMove.game_id == game.id)
-            )
-            database.add_all(game_moves)
+                    candidate_moves=analysis.candidate_moves,
+                ))
+                now = monotonic()
+                if parsed_move.ply == 1 or now - last_publish >= 0.25:
+                    database.commit()
+                    last_publish = now
             game.status = "completed"
             game.analyzed_at = datetime.now(timezone.utc)
             database.commit()
@@ -92,9 +82,3 @@ def analyze_game_task(game_id: int) -> None:
                 failed_game.error_message = str(error)[:1000]
                 database.commit()
             raise
-        finally:
-            if engine is not None:
-                try:
-                    engine.quit()
-                except (chess.engine.EngineError, OSError, TimeoutError):
-                    pass

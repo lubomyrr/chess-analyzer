@@ -38,6 +38,9 @@ class GameMoveResponse(BaseModel):
     classification: str | None
     best_move: str | None
     principal_variation: list[str] | None
+    candidate_moves: list[str] | None = None
+    clock_seconds: float | None = None
+    thinking_time_seconds: float | None = None
 
 
 class PlayerStatisticsResponse(BaseModel):
@@ -45,6 +48,11 @@ class PlayerStatisticsResponse(BaseModel):
     player: str
     accuracy: float | None
     moves: int
+    brilliant: int = 0
+    great: int = 0
+    book: int = 0
+    excellent: int = 0
+    miss: int = 0
     best: int
     good: int
     inaccuracies: int
@@ -59,3 +67,17 @@ class GameAnalysisResponse(BaseModel):
     white_stats: PlayerStatisticsResponse
     black_stats: PlayerStatisticsResponse
     moves: list[GameMoveResponse]
+    initial_clock_seconds: float | None = None
+    total_moves: int = 0
+    starting_fen: str | None = None
+
+
+class PositionCandidatesResponse(BaseModel):
+    position_ply: int
+    candidate_moves: list[str]
+    ready: bool = True
+
+
+class PlayerCountriesResponse(BaseModel):
+    white_country: str | None = None
+    black_country: str | None = None

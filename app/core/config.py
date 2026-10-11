@@ -6,9 +6,10 @@ class Settings(BaseSettings):
     database_url: str
     celery_broker_url: str = "amqp://guest:guest@localhost:5672//"
     stockfish_path: str = "stockfish"
-    stockfish_depth: int = 12
-    stockfish_threads: int = 1
-    stockfish_hash_mb: int = 64
+    stockfish_depth: int = 20
+    # 0 reserves two CPU threads and uses up to eight; positive values override it.
+    stockfish_threads: int = 0
+    stockfish_hash_mb: int = 512
     stockfish_timeout_seconds: float = 120.0
     analysis_pv_length: int = 4
 

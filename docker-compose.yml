@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:17.11-alpine3.24
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -17,6 +18,7 @@ services:
 
   rabbitmq:
     image: rabbitmq:4.2.9-management-alpine
+    restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
@@ -34,17 +36,18 @@ services:
   api:
     build: .
     image: chess-analyzer-app:local
+    restart: unless-stopped
     command:
-      - sh
-      - -c
-      - python -m alembic upgrade head && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+      - python
+      - -m
+      - app.start_api
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       CELERY_BROKER_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672//
       STOCKFISH_PATH: /usr/games/stockfish
       STOCKFISH_DEPTH: ${STOCKFISH_DEPTH}
-      STOCKFISH_THREADS: ${STOCKFISH_THREADS}
-      STOCKFISH_HASH_MB: ${STOCKFISH_HASH_MB}
+      STOCKFISH_THREADS: ${STOCKFISH_THREADS:-0}
+      STOCKFISH_HASH_MB: ${STOCKFISH_HASH_MB:-512}
       STOCKFISH_TIMEOUT_SECONDS: ${STOCKFISH_TIMEOUT_SECONDS:-120}
       ANALYSIS_PV_LENGTH: ${ANALYSIS_PV_LENGTH}
     ports:
@@ -54,7 +57,7 @@ services:
         - CMD
         - python
         - -c
-        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)
       interval: 10s
       timeout: 5s
       retries: 5
@@ -67,6 +70,7 @@ services:
   worker:
     build: .
     image: chess-analyzer-app:local
+    restart: unless-stopped
     command:
       - python
       - -m
@@ -83,8 +87,8 @@ services:
       CELERY_BROKER_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672//
       STOCKFISH_PATH: /usr/games/stockfish
       STOCKFISH_DEPTH: ${STOCKFISH_DEPTH}
-      STOCKFISH_THREADS: ${STOCKFISH_THREADS}
-      STOCKFISH_HASH_MB: ${STOCKFISH_HASH_MB}
+      STOCKFISH_THREADS: ${STOCKFISH_THREADS:-0}
+      STOCKFISH_HASH_MB: ${STOCKFISH_HASH_MB:-512}
       STOCKFISH_TIMEOUT_SECONDS: ${STOCKFISH_TIMEOUT_SECONDS:-120}
       ANALYSIS_PV_LENGTH: ${ANALYSIS_PV_LENGTH}
     depends_on:

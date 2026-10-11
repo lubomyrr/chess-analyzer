@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import StringIO
+import re
 
 import chess.pgn
 
@@ -14,6 +15,8 @@ class ParsedMove:
     san_move: str
     fen_before: str
     fen_after: str
+    clock_seconds: float | None = None
+    thinking_time_seconds: float | None = None
 
 
 @dataclass
@@ -26,6 +29,7 @@ class ParsedGame:
     played_at: datetime | None
     starting_fen: str
     moves: list[ParsedMove]
+    initial_clock_seconds: float | None = None
 
 
 def parse_pgn(raw_pgn: str) -> ParsedGame:
@@ -48,13 +52,25 @@ def parse_pgn(raw_pgn: str) -> ParsedGame:
     board = game.board()
     starting_fen = board.fen()
     parsed_moves: list[ParsedMove] = []
+    control = re.fullmatch(r"(\d+)(?:\+(\d+(?:\.\d+)?))?", game.headers.get("TimeControl", ""))
+    increment = float(control[2] or 0) if control else None
+    initial_clock = (float(control[1]) if control and starting_fen == chess.STARTING_FEN else None)
+    previous_clocks = {"white": initial_clock, "black": initial_clock}
 
-    for ply, move in enumerate(game.mainline_moves(), start=1):
+    for ply, node in enumerate(game.mainline(), start=1):
+        move = node.move
         side = "white" if board.turn == chess.WHITE else "black"
         fen_before = board.fen()
         san_move = board.san(move)
         uci_move = move.uci()
         move_number = board.fullmove_number
+        clock = node.clock()
+        elapsed = node.emt()
+        previous = previous_clocks[side]
+        if elapsed is None and clock is not None and previous is not None and increment is not None:
+            elapsed = previous + increment - clock
+        previous_clocks[side] = clock
+        thinking_time = round(elapsed, 3) if elapsed is not None and elapsed >= 0 else None
 
         board.push(move)
 
@@ -67,6 +83,8 @@ def parse_pgn(raw_pgn: str) -> ParsedGame:
                 san_move=san_move,
                 fen_before=fen_before,
                 fen_after=board.fen(),
+                clock_seconds=clock,
+                thinking_time_seconds=thinking_time,
             )
         )
 
@@ -82,6 +100,7 @@ def parse_pgn(raw_pgn: str) -> ParsedGame:
         played_at=_parse_played_at(game.headers),
         starting_fen=starting_fen,
         moves=parsed_moves,
+        initial_clock_seconds=initial_clock,
     )
 
 

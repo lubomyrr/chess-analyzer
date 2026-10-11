@@ -39,3 +39,22 @@ def test_calculate_player_statistics_uses_only_selected_color() -> None:
     assert statistics["mistakes"] == 1
     assert statistics["blunders"] == 0
     assert statistics["accuracy"] == 83.5
+
+
+def test_accuracy_accounts_for_position_and_color() -> None:
+    assert move_accuracy(100, 1000, 900) > move_accuracy(100, 100, 0)
+    assert move_accuracy(100, -100, 0, "black") == move_accuracy(100, 100, 0)
+    assert move_accuracy(0, 0, 100) == 100
+
+
+def test_statistics_include_all_ten_categories() -> None:
+    from app.services.move_quality import CLASSIFICATIONS
+    from app.schemas.game import PlayerStatisticsResponse
+
+    moves = [SimpleNamespace(side="white", centipawn_loss=0, classification=key)
+             for key in CLASSIFICATIONS]
+    stats = PlayerStatisticsResponse(**calculate_player_statistics(moves, "white", "Player"))
+    for key in ("brilliant", "great", "book", "best", "excellent", "good", "miss",
+                "inaccuracies", "mistakes", "blunders"):
+        assert getattr(stats, key) == 1
+    assert stats.moves == 10

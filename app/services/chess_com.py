@@ -5,7 +5,7 @@ from urllib.parse import quote, urlparse
 import httpx
 
 
-CHESS_COM_USER_AGENT = "ChessAnalyzer/0.1 (private local project)"
+CHESS_COM_USER_AGENT = "ChessAnalyzer/0.1"
 MAX_CHESS_COM_RESPONSE_SIZE = 20_000_000
 GAME_PATHS = (
     re.compile(r"/(?:analysis/)?game/(live|daily)/([0-9]+)"),
@@ -14,7 +14,6 @@ GAME_PATHS = (
 
 
 def fetch_chess_com_pgn(game_url: str) -> str:
-    """Find the PGN belonging to a public Chess.com game URL."""
     game_type, game_id = parse_chess_com_url(game_url)
     details = _get_json(
         f"https://www.chess.com/callback/{game_type}/game/{game_id}"
@@ -62,7 +61,7 @@ def _game_id_from_url(game_url: str) -> str | None:
     return match.group(1) if match else None
 
 
-def _get_json(url: str) -> dict:
+def _get_json(url: str, *, timeout: float = 15, max_size: int = MAX_CHESS_COM_RESPONSE_SIZE) -> dict:
     headers = {
         "Accept": "application/json",
         "User-Agent": CHESS_COM_USER_AGENT,
@@ -73,13 +72,13 @@ def _get_json(url: str) -> dict:
             "GET",
             url,
             headers=headers,
-            timeout=15,
+            timeout=timeout,
             follow_redirects=True,
         ) as response:
             response.raise_for_status()
             for chunk in response.iter_bytes():
                 content.extend(chunk)
-                if len(content) > MAX_CHESS_COM_RESPONSE_SIZE:
+                if len(content) > max_size:
                     raise ValueError("Chess.com response is too large")
     except httpx.HTTPError as error:
         raise ValueError("Could not download this public Chess.com game") from error

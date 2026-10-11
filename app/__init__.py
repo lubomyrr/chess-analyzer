@@ -1,1 +1,1 @@
-"""Chess Analyzer application package."""
+

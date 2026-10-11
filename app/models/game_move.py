@@ -38,6 +38,7 @@ class GameMove(Base):
     classification: Mapped[str | None] = mapped_column(String(20))
     best_move: Mapped[str | None] = mapped_column(String(5))
     principal_variation: Mapped[list[str] | None] = mapped_column(JSON)
+    candidate_moves: Mapped[list[str] | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

@@ -8113,6 +8113,9 @@
  "rn1qkbnr/1b1p1ppp/p3p3/1p6/3NP3/2N3P1/PPP2P1P/R1BQKB1R w KQkq -": [
   "f1g2"
  ],
+ "rn1qkbnr/1b1p1ppp/p3p3/1p6/3NP3/2NB4/PPP2PPP/R1BQK2R w KQkq -": [
+  "e1g1"
+ ],
  "rn1qkbnr/1b1p1ppp/p3p3/1pp5/3PP3/2PB1N2/PP3PPP/RNBQ1RK1 b kq -": [
   "g8f6"
  ],
@@ -16015,6 +16018,7 @@
   "g2g3"
  ],
  "rnbqkbnr/3p1ppp/p3p3/1p6/3NP3/2NB4/PPP2PPP/R1BQK2R b KQkq -": [
+  "c8b7",
   "d8b6"
  ],
  "rnbqkbnr/3p1ppp/p3p3/1p6/3pP3/2N2NP1/PPP2P1P/R1BQKB1R w KQkq -": [

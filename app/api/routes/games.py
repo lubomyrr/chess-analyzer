@@ -7,6 +7,7 @@ from fastapi import (
     Form,
     HTTPException,
     Response,
+    Query,
     UploadFile,
     status,
 )
@@ -14,6 +15,7 @@ from kombu.exceptions import OperationalError
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.core.config import settings
 from app.models.game import Game
 from app.repositories.games import (
     create_game,
@@ -25,12 +27,19 @@ from app.repositories.games import (
 )
 from app.schemas.game import (
     GameAnalysisResponse,
+    GameMoveResponse,
     GameResponse,
     PlayerStatisticsResponse,
+    PositionCandidatesResponse,
+    PlayerCountriesResponse,
 )
 from app.services.chess_com import fetch_chess_com_pgn
 from app.services.game_statistics import calculate_player_statistics
 from app.services.pgn_parser import parse_pgn
+from app.services.position_candidates import position_candidates
+from app.services.player_countries import is_chess_com_game, player_country
+import chess
+import chess.engine
 from app.workers.analyze_game import analyze_game_task
 
 
@@ -144,6 +153,52 @@ def remove_game(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.get("/{game_id}/players", response_model=PlayerCountriesResponse)
+def read_player_countries(
+    game_id: int,
+    database: Annotated[Session, Depends(get_db)],
+) -> PlayerCountriesResponse:
+    game = get_game(database, game_id)
+    if game is None:
+        raise HTTPException(status_code=404, detail="Game not found")
+    if not is_chess_com_game(game.raw_pgn):
+        return PlayerCountriesResponse()
+    return PlayerCountriesResponse(white_country=player_country(game.white_player),
+                                   black_country=player_country(game.black_player))
+
+
+@router.get("/{game_id}/candidates", response_model=PositionCandidatesResponse)
+def read_position_candidates(
+    game_id: int,
+    ply: Annotated[int, Query(ge=0)],
+    response: Response,
+    database: Annotated[Session, Depends(get_db)],
+) -> PositionCandidatesResponse:
+    game = get_game(database, game_id)
+    if game is None:
+        raise HTTPException(status_code=404, detail="Game not found")
+    parsed = parse_pgn(game.raw_pgn)
+    if ply > len(parsed.moves):
+        raise HTTPException(status_code=422, detail="Position is outside this game")
+    stored = next((move for move in get_game_moves(database, game.id) if move.ply == ply + 1), None)
+    if stored is not None and len(stored.candidate_moves or []) >= 3:
+        return PositionCandidatesResponse(position_ply=ply, candidate_moves=stored.candidate_moves)
+    board = chess.Board(parsed.starting_fen)
+    for move in parsed.moves[:ply]:
+        board.push_uci(move.uci_move)
+    try:
+        candidates = position_candidates(board, engine_path=settings.stockfish_path,
+                                         depth=settings.stockfish_depth, hash_mb=settings.stockfish_hash_mb,
+                                         timeout=settings.stockfish_timeout_seconds)
+    except (chess.engine.EngineError, OSError, TimeoutError) as error:
+        raise HTTPException(status_code=503, detail="Stockfish suggestions are unavailable") from error
+    if candidates is None:
+        response.status_code = 202
+        response.headers['Retry-After'] = '1'
+    return PositionCandidatesResponse(position_ply=ply, candidate_moves=candidates or [],
+                                      ready=candidates is not None)
+
+
 @router.get("/{game_id}/analysis", response_model=GameAnalysisResponse)
 def read_game_analysis(
     game_id: int,
@@ -154,6 +209,16 @@ def read_game_analysis(
         raise HTTPException(status_code=404, detail="Game not found")
 
     moves = get_game_moves(database, game.id)
+    parsed_game = parse_pgn(game.raw_pgn)
+    timing = {move.ply: move for move in parsed_game.moves}
+    response_moves = []
+    for move in moves:
+        response_move = GameMoveResponse.model_validate(move)
+        parsed_move = timing.get(move.ply)
+        if parsed_move is not None and parsed_move.uci_move == move.uci_move:
+            response_move.clock_seconds = parsed_move.clock_seconds
+            response_move.thinking_time_seconds = parsed_move.thinking_time_seconds
+        response_moves.append(response_move)
     return GameAnalysisResponse(
         game_id=game.id,
         status=game.status,
@@ -164,7 +229,10 @@ def read_game_analysis(
         black_stats=PlayerStatisticsResponse(
             **calculate_player_statistics(moves, "black", game.black_player)
         ),
-        moves=moves,
+        moves=response_moves,
+        initial_clock_seconds=parsed_game.initial_clock_seconds,
+        total_moves=len(parsed_game.moves),
+        starting_fen=parsed_game.starting_fen,
     )
 
 
