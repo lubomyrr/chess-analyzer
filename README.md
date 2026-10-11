@@ -26,8 +26,7 @@ preferences, as explicitly requested for this viewer.
 The White/Black counters for Brilliant, Great, Blunder and Miss open the first
 matching move for that player; zero counters are disabled.
 Player country flags load separately from public Chess.com profiles and are
-cached for 24 hours. The SVG flags are local assets from flag-icons (MIT); see
-`app/static/assets/flags/NOTICE.md`. Profiles without a country omit the flag.
+cached for 24 hours. Profiles without a country omit the flag.
 The search stays at depth 20. Each position is evaluated once, and the next
 position supplies the played move's evaluation. Best played moves receive an
 additional full-depth check of the strongest alternative outside the opening.
