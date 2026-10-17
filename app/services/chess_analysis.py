@@ -183,7 +183,7 @@ def _search_position(engine: chess.engine.SimpleEngine, board: chess.Board,
     info = chess.engine.INFO_SCORE | chess.engine.INFO_PV
     best = engine.analyse(board, limit, info=info)
     lines = [best]
-    if (played is not None and best.get('pv', [None])[0] == played
+    if (played is not None and (best.get('pv') or [None])[0] == played
             and not book):
         alternatives = [move for move in board.legal_moves if move != played]
         if alternatives:
@@ -311,7 +311,7 @@ def analyze_moves(
     for played_move, book in zip(played_moves, book_moves, strict=True):
         before_lines = engine.analyse(board, limit, multipv=3, info=info)
         played = next((line for line in before_lines
-                       if line.get("pv", [None])[0] == played_move), None)
+                       if (line.get("pv") or [None])[0] == played_move), None)
         if played is None:
             played = engine.analyse(board, limit, root_moves=[played_move], info=info)
         points_before = expected_points(_score_for_color(before_lines[0]['score'], board.turn))
@@ -331,7 +331,7 @@ def _analyze_played_move(board: chess.Board, played_move: chess.Move,
     points_before = expected_points(before_cp)
     points_after = expected_points(played_cp)
     loss = max(0.0, points_before - points_after)
-    best_move = best.get("pv", [played_move])[0]
+    best_move = (best.get("pv") or [played_move])[0]
     is_best = played_move == best_move
     classification = classify_loss(loss, is_best=is_best)
     alternative = (expected_points(_score_for_color(before_lines[1]["score"], color))
@@ -381,7 +381,10 @@ def _capture_gain(board: chess.Board, move: chess.Move) -> int:
 def _hanging_pieces(board: chess.Board, color: chess.Color) -> dict[int, int]:
     probe = board.copy(stack=False)
     if probe.turn == color:
-        probe.push(chess.Move.null())
+        try:
+            probe.push(chess.Move.null())
+        except ValueError:
+            return {}
     hanging: dict[int, int] = {}
     for capture in list(probe.legal_moves):
         victim = probe.piece_at(capture.to_square)
