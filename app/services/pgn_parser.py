@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import lru_cache
 from io import StringIO
 import re
 
@@ -32,6 +33,7 @@ class ParsedGame:
     initial_clock_seconds: float | None = None
 
 
+@lru_cache(maxsize=128)
 def parse_pgn(raw_pgn: str) -> ParsedGame:
     if not raw_pgn.strip():
         raise ValueError("PGN file is empty")
@@ -52,7 +54,7 @@ def parse_pgn(raw_pgn: str) -> ParsedGame:
     board = game.board()
     starting_fen = board.fen()
     parsed_moves: list[ParsedMove] = []
-    control = re.fullmatch(r"(\d+)(?:\+(\d+(?:\.\d+)?))?", game.headers.get("TimeControl", ""))
+    control = re.fullmatch(r"(\d+)(?:\+(\d+(?:\.\d+)?))?", game.headers.get("TimeControl", "").strip())
     increment = float(control[2] or 0) if control else None
     initial_clock = (float(control[1]) if control and starting_fen == chess.STARTING_FEN else None)
     previous_clocks = {"white": initial_clock, "black": initial_clock}
@@ -118,14 +120,34 @@ def _parse_played_at(headers: chess.pgn.Headers) -> datetime | None:
     if not date_value or "?" in date_value:
         return None
 
-    time_value = headers.get("UTCTime", "00:00:00")
-
-    try:
-        parsed_date = datetime.strptime(
-            f"{date_value} {time_value}",
-            "%Y.%m.%d %H:%M:%S",
-        )
-    except ValueError:
+    cleaned_date = date_value.strip().replace("-", ".").replace("/", ".")
+    parts = cleaned_date.split(".")
+    if len(parts) == 3:
+        try:
+            year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
+            cleaned_date = f"{year:04d}.{month:02d}.{day:02d}"
+        except ValueError:
+            return None
+    else:
         return None
 
-    return parsed_date.replace(tzinfo=timezone.utc)
+    time_value = (headers.get("UTCTime") or headers.get("Time") or "00:00:00").strip()
+    if "?" in time_value:
+        time_value = "00:00:00"
+
+    cleaned_time = time_value.split(".")[0].strip()
+    if len(cleaned_time.split(":")) == 2:
+        cleaned_time += ":00"
+
+    for time_format in ("%Y.%m.%d %H:%M:%S", "%Y.%m.%d %H:%M"):
+        try:
+            parsed = datetime.strptime(f"{cleaned_date} {cleaned_time}", time_format)
+            return parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+
+    try:
+        parsed = datetime.strptime(cleaned_date, "%Y.%m.%d")
+        return parsed.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
