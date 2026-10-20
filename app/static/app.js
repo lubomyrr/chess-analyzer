@@ -35,8 +35,8 @@ const engineLabels = {
 };
 
 const pageCopy = {
-    dashboard: ["Private workspace", "Overview"],
-    games: ["Activity", "Matches"],
+    dashboard: ["Your chess workspace", "The analysis desk."],
+    games: ["Your collection", "Game library"],
 };
 
 const pieceImageCodes = {
@@ -74,7 +74,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function bindNavigation() {
     document.querySelectorAll("[data-view-target]").forEach((button) => {
-        button.addEventListener("click", () => switchView(button.dataset.viewTarget));
+        button.addEventListener("click", () => {
+            if (button.dataset.viewTarget === "games") closeAnalysis();
+            else switchView(button.dataset.viewTarget);
+        });
     });
 
 }
@@ -155,6 +158,17 @@ function bindGames() {
         if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
             event.preventDefault();
             setReviewPosition(state.reviewIndex + (event.key === "ArrowLeft" ? -1 : 1));
+        } else if (event.key === "Home") {
+            event.preventDefault();
+            setReviewPosition(-1);
+        } else if (event.key === "End") {
+            event.preventDefault();
+            setReviewPosition(state.currentMoves.length - 1);
+        } else if (event.key === "f" || event.key === "F") {
+            event.preventDefault();
+            state.boardOrientation = state.boardOrientation === "white" ? "black" : "white";
+            renderPlayerStatistics();
+            setReviewPosition(state.reviewIndex);
         }
     });
 
@@ -455,13 +469,16 @@ function renderQualitySummary() {
     });
     document.querySelector("#review-quality-summary").innerHTML = `
         <summary>Move classifications <span>White / Black</span></summary>
-        <table aria-label="Move classifications by player">
-            <thead><tr><th scope="col">Classification</th><th scope="col">White</th><th scope="col"><span class="sr-only">Icon</span></th><th scope="col">Black</th></tr></thead>
-            <tbody>${moveQualities.map((quality) => `
-                <tr class="summary-${quality.key}"><th scope="row">${quality.label}</th>
-                <td>${qualitySummaryCount(quality, "white", counts.white[quality.key] || 0, firstMoves.white[quality.key])}</td><td>${quality.flag}</td>
-                <td>${qualitySummaryCount(quality, "black", counts.black[quality.key] || 0, firstMoves.black[quality.key])}</td></tr>`).join("")}</tbody>
-        </table>`;
+        <div class="quality-grid" role="group" aria-label="Move classifications by player">
+            ${moveQualities.map((quality) => `
+                <div class="quality-tile summary-${quality.key}" role="group" aria-label="${quality.label}">
+                    ${quality.flag}<span class="quality-tile-label">${quality.label}</span>
+                    <div class="quality-tile-counts">
+                        <span title="White"><span class="sr-only">White: </span>${qualitySummaryCount(quality, "white", counts.white[quality.key] || 0, firstMoves.white[quality.key])}</span>
+                        <span title="Black"><span class="sr-only">Black: </span>${qualitySummaryCount(quality, "black", counts.black[quality.key] || 0, firstMoves.black[quality.key])}</span>
+                    </div>
+                </div>`).join("")}
+        </div>`;
 }
 
 function qualitySummaryCount(quality, side, count, index) {
@@ -782,7 +799,7 @@ function loadReviewCandidates(fen) {
 }
 
 function bestMoveArrows(candidates, files, ranks, board) {
-    const colors = ["#39c5bb", "#a3a8b0", "#a3a8b0"];
+    const colors = ["#b6c69b", "#d0c6ad", "#d0c6ad"];
     const roots = [...new Set(candidates.map((move) => move.slice(0, 4)))].slice(0, 3);
     if (!roots.length) return "";
     const paths = roots.map((move, index) => {
